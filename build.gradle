@@ -30,6 +30,11 @@ dependencies {
 sourceCompatibility = 1.8
 targetCompatibility = 1.8
 
+wrapper {
+  distributionType = Wrapper.DistributionType.ALL
+  gradleVersion = "6.0.1"
+}
+
 task sourcesJar(type: Jar, dependsOn: classes) {
   classifier = 'sources'
   from sourceSets.main.allSource
