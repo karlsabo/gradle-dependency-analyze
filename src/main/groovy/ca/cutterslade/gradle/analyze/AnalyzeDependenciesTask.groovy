@@ -19,8 +19,11 @@ class AnalyzeDependenciesTask extends DefaultTask {
   boolean justWarn = false
   @Input
   boolean logDependencyInformationToFiles = false
+  @InputFiles
   List<Configuration> require = []
+  @InputFiles
   List<Configuration> allowedToUse = []
+  @InputFiles
   List<Configuration> allowedToDeclare = []
   @InputFiles
   FileCollection classesDirs = project.files()
