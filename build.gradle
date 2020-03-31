@@ -58,6 +58,16 @@ publishing {
     maven {
       url "$buildDir/repo"
     }
+    for (int mavenRepositoryIndex = 0; mavenRepositoryIndex < 100 && project.hasProperty("maven.repository.url.$mavenRepositoryIndex"); mavenRepositoryIndex++) {
+      logger.info("Going to publish to maven.repository.url.$mavenRepositoryIndex(" + project.getProperty("maven.repository.url.$mavenRepositoryIndex") + ")")
+      maven{
+        url = project.getProperty("maven.repository.url.$mavenRepositoryIndex")
+        credentials {
+          username = project.getProperty("maven.repository.username.$mavenRepositoryIndex")
+          password = project.getProperty("maven.repository.password.$mavenRepositoryIndex")
+        }
+      }
+    }
   }
 }
 
