@@ -3,14 +3,14 @@ plugins {
   id 'groovy'
   id 'maven'
   id 'maven-publish'
-  id 'com.jfrog.bintray' version '1.8.4'
-  id 'com.jfrog.artifactory' version '4.8.1'
-  id 'com.gradle.plugin-publish' version '0.10.1'
+  id 'com.jfrog.bintray' version '1.8.5'
+  id 'com.jfrog.artifactory' version '4.15.2'
+  id 'com.gradle.plugin-publish' version '0.11.0'
   id 'java-gradle-plugin'
 }
 
 group = 'ca.cutterslade.gradle'
-version = '1.4.1-stellar'
+version = '1.4.3-stellar-SNAPSHOT'
 
 repositories {
   jcenter()
@@ -19,7 +19,7 @@ repositories {
 dependencies {
   compile gradleApi()
   compile localGroovy()
-  compile 'org.apache.maven.shared:maven-dependency-analyzer:1.11.1'
+  compile 'org.apache.maven.shared:maven-dependency-analyzer:1.11.2'
 
   testImplementation("commons-io:commons-io:2.6")
   testImplementation("org.spockframework:spock-core:1.3-groovy-2.4") {

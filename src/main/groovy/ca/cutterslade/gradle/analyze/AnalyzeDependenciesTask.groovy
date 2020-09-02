@@ -7,6 +7,7 @@ import org.gradle.api.file.FileCollection
 import org.gradle.api.internal.artifacts.DefaultResolvedArtifact
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputFiles
+import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.TaskAction
 
@@ -29,6 +30,8 @@ class AnalyzeDependenciesTask extends DefaultTask {
   FileCollection classesDirs = project.files()
   @OutputDirectory
   File outputDirectory = project.file("$project.buildDir/$DEPENDENCY_ANALYZE_DEPENDENCY_DIRECTORY_NAME/")
+  @OutputFile
+  File outputFile = project.file("$project.buildDir/reports/dependency-analyze/$name")
 
   AnalyzeDependenciesTask() {
     def methods = outputs.class.getMethods().grep {Method m -> m.name == 'cacheIf'}
