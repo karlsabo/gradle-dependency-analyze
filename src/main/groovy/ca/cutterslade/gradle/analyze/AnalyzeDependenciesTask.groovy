@@ -15,13 +15,16 @@ import java.lang.reflect.Method
 class AnalyzeDependenciesTask extends DefaultTask {
   @Input
   boolean justWarn = false
+  @InputFiles
   List<Configuration> require = []
+  @InputFiles
   List<Configuration> allowedToUse = []
+  @InputFiles
   List<Configuration> allowedToDeclare = []
   @InputFiles
   FileCollection classesDirs = project.files()
   @OutputFile
-  File outputFile = project.file("$project.buildDir/dependency-analyze/$name")
+  File outputFile = project.file("$project.buildDir/reports/dependency-analyze/$name")
 
   AnalyzeDependenciesTask() {
     def methods = outputs.class.getMethods().grep {Method m -> m.name == 'cacheIf'}
