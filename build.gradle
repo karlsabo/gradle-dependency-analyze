@@ -1,3 +1,8 @@
+//==============================================================================
+// This software is developed by Stellar Science Ltd Co and the U.S. Government.
+// Copyright (C) 2020 Stellar Science; U.S. Government has Unlimited Rights.
+// Warning: May contain EXPORT CONTROLLED, FOUO, ITAR, or sensitive information.
+//==============================================================================
 plugins {
   id 'java'
   id 'groovy'
@@ -10,7 +15,7 @@ plugins {
 }
 
 group = 'ca.cutterslade.gradle'
-version = '1.4.3-stellar-SNAPSHOT'
+version = '1.4.3-STELLAR-SNAPSHOT'
 
 repositories {
   jcenter()
