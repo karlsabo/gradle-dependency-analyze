@@ -1,15 +1,14 @@
+//==============================================================================
+// This software is developed by Stellar Science Ltd Co and the U.S. Government.
+// Copyright (C) 2020 Stellar Science; U.S. Government has Unlimited Rights.
+// Warning: May contain EXPORT CONTROLLED, FOUO, ITAR, or sensitive information.
+//==============================================================================
 package ca.cutterslade.gradle.analyze
 
-import org.apache.maven.shared.dependency.analyzer.ProjectDependencyAnalysis
 import org.gradle.api.DefaultTask
 import org.gradle.api.artifacts.Configuration
 import org.gradle.api.file.FileCollection
-import org.gradle.api.internal.artifacts.DefaultResolvedArtifact
-import org.gradle.api.tasks.Input
-import org.gradle.api.tasks.InputFiles
-import org.gradle.api.tasks.OutputFile
-import org.gradle.api.tasks.OutputDirectory
-import org.gradle.api.tasks.TaskAction
+import org.gradle.api.tasks.*
 
 import java.lang.reflect.Method
 import java.nio.file.Files
@@ -46,22 +45,35 @@ class AnalyzeDependenciesTask extends DefaultTask {
 
   @TaskAction
   def action() {
-    logger.info "Analyzing dependencies of $classesDirs for [require: $require, allowedToUse: $allowedToUse, " +
-        "allowedToDeclare: $allowedToDeclare]"
-    ProjectDependencyAnalysis analysis =
-        new ProjectDependencyResolver(project, require, allowedToUse, allowedToDeclare, classesDirs, logDependencyInformationToFiles)
-            .analyzeDependencies()
+    logger.info "Analyzing dependencies of project ${project.name},${project.displayName}, with class dirs $classesDirs for [require: $require, allowedToUse: $allowedToUse, " +
+            "allowedToDeclare: $allowedToDeclare]"
+    GradleProjectDependencyAnalysis analysis =
+            new ProjectDependencyResolver(project, require, allowedToUse, allowedToDeclare, classesDirs, logDependencyInformationToFiles)
+                    .analyzeDependencies(name)
     StringBuffer buffer = new StringBuffer()
-    ['usedUndeclaredArtifacts', 'unusedDeclaredArtifacts'].each {section ->
-      def violations = analysis."$section"
-      if (violations) {
-        buffer.append("$section: \n")
-        violations.sort { it.moduleVersion.id.toString() }.each { DefaultResolvedArtifact it ->
-          def clas = it.classifier ? ":$it.classifier" : ""
-          buffer.append(" - $it.moduleVersion.id$clas@$it.extension\n")
-        }
+//    ['usedUndeclared', 'unusedDeclared'].each {section ->
+//      def violations = analysis."$section"
+//      if (violations) {
+//        buffer.append("$section: \n")
+//        violations.sort { it.moduleVersion.id.toString() }.each { DefaultResolvedArtifact it ->
+//          def clas = it.classifier ? ":$it.classifier" : ""
+//          buffer.append(" - $it.moduleVersion.id$clas@$it.extension\n")
+//        }
+//      }
+//    }
+    if (analysis.getUnusedDeclared().size() > 0) {
+      buffer.append("Unused declared dependency (unusedDeclaredArtifacts): \n")
+      analysis.getUnusedDeclared().each {
+        buffer.append(" - $it")
       }
     }
+    if (analysis.getUsedUndeclared().size() > 0) {
+      buffer.append("Used undeclared dependency (usedUndeclaredArtifacts): \n")
+      analysis.getUsedUndeclared().each {
+        buffer.append(" - $it")
+      }
+    }
+
     final def outputFile = new File(outputDirectory, name)
     outputFile.parentFile.mkdirs()
     outputFile.text = buffer.toString()
@@ -69,8 +81,7 @@ class AnalyzeDependenciesTask extends DefaultTask {
       def message = "Dependency analysis found issues.\n$buffer"
       if (justWarn) {
         logger.warn message
-      }
-      else {
+      } else {
         throw new DependencyAnalysisException(message)
       }
     }
