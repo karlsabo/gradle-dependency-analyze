@@ -1,3 +1,8 @@
+//==============================================================================
+// This software is developed by Stellar Science Ltd Co and the U.S. Government.
+// Copyright (C) 2020 Stellar Science; U.S. Government has Unlimited Rights.
+// Warning: May contain EXPORT CONTROLLED, FOUO, ITAR, or sensitive information.
+//==============================================================================
 package ca.cutterslade.gradle.analyze
 
 import org.gradle.testkit.runner.BuildResult
@@ -102,6 +107,31 @@ class AnalyzeDependenciesPluginSpec extends Specification {
         "compile"        | "unusedDeclaredArtifacts"
         "implementation" | "unusedDeclaredArtifacts"
         "compileOnly"    | "unusedDeclaredArtifacts"
+        "runtimeOnly"    | SUCCESS
+    }
+
+    @Unroll
+    def "unused main dependency with permitUnusedDeclared declared with #configuration results in #expectedResult"(String configuration, String expectedResult) {
+        setup:
+        rootProject()
+                .withMainClass(new GroovyClass("Main"))
+                .withSubProject(subProject("independent")
+                        .withMainClass(new GroovyClass("Independent")))
+                .withDependency(new GradleDependency(configuration: configuration, project: "independent"))
+                .withDependency(new GradleDependency(configuration: "permitUnusedDeclared", project: "independent"))
+                .create(projectDir.getRoot())
+
+        when:
+        BuildResult result = buildGradleProject(expectedResult)
+
+        then:
+        assertBuildResult(result, expectedResult)
+
+        where:
+        configuration    | expectedResult
+        "compile"        | SUCCESS
+        "implementation" | SUCCESS
+        "compileOnly"    | SUCCESS
         "runtimeOnly"    | SUCCESS
     }
 
@@ -212,7 +242,7 @@ class AnalyzeDependenciesPluginSpec extends Specification {
     }
 
     private static GradleProject rootProject() {
-        new GradleProject("project", true)
+        new GradleProject("rootProject", true)
                 .withPlugin("ca.cutterslade.analyze")
                 .withDependency(new GradleDependency(configuration: "compile", reference: "localGroovy()"))
     }
@@ -226,7 +256,7 @@ class AnalyzeDependenciesPluginSpec extends Specification {
         GradleRunner.create()
                 .withProjectDir(projectDir.getRoot())
                 .withPluginClasspath()
-                .withArguments("build")
+                .withArguments("-i", "--stacktrace", "--no-parallel", "build")
     }
 
     private static void assertBuildSuccess(BuildResult result) {

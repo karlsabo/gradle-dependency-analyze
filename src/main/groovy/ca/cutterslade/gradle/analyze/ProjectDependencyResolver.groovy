@@ -1,17 +1,22 @@
+//==============================================================================
+// This software is developed by Stellar Science Ltd Co and the U.S. Government.
+// Copyright (C) 2020 Stellar Science; U.S. Government has Unlimited Rights.
+// Warning: May contain EXPORT CONTROLLED, FOUO, ITAR, or sensitive information.
+//==============================================================================
 package ca.cutterslade.gradle.analyze
 
 import groovy.transform.CompileStatic
-import org.apache.maven.artifact.Artifact
 import org.apache.maven.shared.dependency.analyzer.ClassAnalyzer
 import org.apache.maven.shared.dependency.analyzer.DefaultClassAnalyzer
 import org.apache.maven.shared.dependency.analyzer.DependencyAnalyzer
-import org.apache.maven.shared.dependency.analyzer.ProjectDependencyAnalysis
 import org.apache.maven.shared.dependency.analyzer.asm.ASMDependencyAnalyzer
 import org.gradle.api.Project
 import org.gradle.api.UnknownDomainObjectException
 import org.gradle.api.artifacts.Configuration
+import org.gradle.api.artifacts.ModuleVersionIdentifier
 import org.gradle.api.artifacts.ResolvedArtifact
 import org.gradle.api.artifacts.ResolvedDependency
+import org.gradle.api.artifacts.component.ComponentArtifactIdentifier
 import org.gradle.api.logging.Logger
 
 import java.nio.file.Files
@@ -20,12 +25,12 @@ import java.util.concurrent.ConcurrentHashMap
 
 @CompileStatic
 class ProjectDependencyResolver {
-  static final String CACHE_NAME = 'ca.cutterslade.gradle.analyze.ProjectDependencyResolver.artifactClassCache'
+  static final String CACHE_NAME = 'ca.cutterslade.gradle.analyze.ProjectDependencyResolver.qualifiedClassNameByArtifactIdentifier'
 
   private final ClassAnalyzer classAnalyzer = new DefaultClassAnalyzer()
   private final DependencyAnalyzer dependencyAnalyzer = new ASMDependencyAnalyzer()
 
-  private final ConcurrentHashMap<File, Set<String>> artifactClassCache
+  private final ConcurrentHashMap<ComponentArtifactIdentifier, Set<String>> qualifiedClassNameByArtifactIdentifier
   private final Logger logger
   private final List<Configuration> require
   private final List<Configuration> allowedToUse
@@ -38,11 +43,10 @@ class ProjectDependencyResolver {
                             final List<Configuration> allowedToUse, final List<Configuration> allowedToDeclare,
                             final Iterable<File> classesDirs, final boolean logDependencyInformationToFile) {
     try {
-      this.artifactClassCache =
-          project.rootProject.extensions.getByName(CACHE_NAME) as ConcurrentHashMap<File, Set<String>>
-    }
-    catch (UnknownDomainObjectException e) {
-      throw new IllegalStateException('Dependency analysis plugin must also be applied to the root project', e)
+      this.qualifiedClassNameByArtifactIdentifier =
+              project.rootProject.extensions.getByName(CACHE_NAME) as ConcurrentHashMap<ComponentArtifactIdentifier, Set<String>>
+    } catch (final UnknownDomainObjectException exception) {
+      throw new IllegalStateException('Dependency analysis plugin must also be applied to the root project', exception)
     }
     this.logger = project.logger
     this.require = removeNulls(require) as List
@@ -56,126 +60,104 @@ class ProjectDependencyResolver {
   static <T> Collection<T> removeNulls(final Collection<T> collection) {
     if (null == collection) {
       []
-    }
-    else {
-      collection.removeAll {it == null}
+    } else {
+      collection.removeAll { it == null }
       collection
     }
   }
 
-  ProjectDependencyAnalysis analyzeDependencies() {
-    Set<ResolvedDependency> allowedToUseDeps = allowedToUseDependencies
-    Set<ResolvedDependency> allowedToDeclareDeps = allowedToDeclareDependencies
-    Set<ResolvedDependency> requiredDeps = requiredDependencies - allowedToUseDeps
-    Set<File> dependencyArtifacts = findModuleArtifactFiles(requiredDeps)
+  /**
+   * Find undeclared and unused dependencies
+   *
+   * Build a set of classes used by this Gradle Module (project)
+   * <br><br>
+   * Build set of declared dependencies (Set<ModuleVersionIdentifier>)<br>
+   *  requiredDependencies -> configuration.resolvedConfiguration.firstLevelModuleDependencies
+   * <br><br>
+   * Build a map of classes Modules, scan all dependencies and their children (Map<String, Set<ModuleVersionIdentifier>>)
+   * <br><br>
+   * Build a set of needed dependencies, scan all classes and map to ModuleVersionIdentifier (Set<ModuleVersionIdentifier>)
+   * <br><br>
+   * Unused declared - Take the set of declared dependencies and remove needed dependencies. (Set<ModuleVersionIdentifier>)<br>
+   *  Remove permitUnusedDeclared (allowedToDeclare)<br>
+   *  Remove permitUsedUndeclared (allowedToUse)
+   * <br><br>
+   * Used undeclared - Take the set of needed dependencies and remove declared dependencies. (Set<ModuleVersionIdentifier>)<br>
+   *    Remove permitUsedUndeclared (allowedToUse)
+   */
+  GradleProjectDependencyAnalysis analyzeDependencies(final String taskName) {
+    final Set<String> classesUsedByClassesDir = analyzeClassDependencies()
+    final Set<ModuleVersionIdentifier> declaredDependencies = getRequiredDependencies().collect { it.module.id } as Set<ModuleVersionIdentifier>
+    final Map<String, Set<ModuleVersionIdentifier>> moduleByQualifiedClassName = getAllModulesByQualifiedClassName()
+    final Set<ModuleVersionIdentifier> neededDependencies = getNeededModules(classesUsedByClassesDir, moduleByQualifiedClassName)
+    final def allowedToDeclaredModules = allowedToDeclareDependencies.collect { it.module.id } as Set<ModuleVersionIdentifier>
+    final def allowedToUseModules = allowedToUseDependencies.collect { it.module.id } as Set<ModuleVersionIdentifier>
 
+    final Set<ModuleVersionIdentifier> unusedDeclaredDependencies = new LinkedHashSet<>(declaredDependencies)
+    logger.info "unusedDeclaredDependencies = $unusedDeclaredDependencies"
+    unusedDeclaredDependencies.removeAll(neededDependencies)
+    logger.info "unusedDeclaredDependencies after removing needed = $unusedDeclaredDependencies"
+    unusedDeclaredDependencies.removeAll(allowedToDeclaredModules)
+    logger.info "unusedDeclaredDependencies after removing allowed to delcare = $unusedDeclaredDependencies"
+    unusedDeclaredDependencies.removeAll(allowedToUseModules)
+    logger.info "unusedDeclaredDependencies after removing allowed to use = $unusedDeclaredDependencies"
 
-    Set<File> allDependencyArtifacts = findAllModuleArtifactFiles(requiredDeps)
-    Map<File, Set<String>> fileClassMap = buildArtifactClassMap(allDependencyArtifacts)
-    Set<String> dependencyClasses = analyzeClassDependencies()
-    Set<File> usedArtifacts = buildUsedArtifacts(fileClassMap, dependencyClasses)
-    Set<File> usedDeclaredArtifacts = new LinkedHashSet<File>(dependencyArtifacts)
-    usedDeclaredArtifacts.retainAll(usedArtifacts)
-
-    Set<File> usedUndeclaredArtifacts = new LinkedHashSet<File>(usedArtifacts)
-    usedUndeclaredArtifacts.removeAll(dependencyArtifacts)
-
-    Set<File> unusedDeclaredArtifacts = new LinkedHashSet<File>(dependencyArtifacts)
-    unusedDeclaredArtifacts.removeAll(usedArtifacts)
-
-    Set<ResolvedArtifact> allowedToUseArtifacts = allowedToUseDeps*.moduleArtifacts?.flatten() as Set<ResolvedArtifact>
-    Set<ResolvedArtifact> allowedToDeclareArtifacts = allowedToDeclareDeps*.moduleArtifacts?.
-        flatten() as Set<ResolvedArtifact>
-
-    Set<ResolvedArtifact> allArtifacts = (((require
-        .collect {it.resolvedConfiguration}
-        .collect {it.firstLevelModuleDependencies}.flatten()) as Set<ResolvedDependency>)
-        .collect {it.allModuleArtifacts}.flatten()) as Set<ResolvedArtifact>
+    final Set<ModuleVersionIdentifier> usedUndeclaredDependencies = new LinkedHashSet<>(neededDependencies)
+    logger.info "usedUndeclaredDependencies = $usedUndeclaredDependencies"
+    usedUndeclaredDependencies.removeAll(declaredDependencies)
+    logger.info "usedUndeclaredDependencies after removing declaredDependencies = $usedUndeclaredDependencies"
+    usedUndeclaredDependencies.removeAll(allowedToUseModules)
+    logger.info "usedUndeclaredDependencies after removing allowedToUseDependencies = $usedUndeclaredDependencies"
 
     if (logDependencyInformationToFile) {
       final def outputDirectoryPath = buildDirPath.resolve(AnalyzeDependenciesTask.DEPENDENCY_ANALYZE_DEPENDENCY_DIRECTORY_NAME)
       Files.createDirectories(outputDirectoryPath)
-      final Path analyzeOutputPath = outputDirectoryPath.resolve("analyzeDependencies.log")
-        new PrintWriter(Files.newOutputStream(analyzeOutputPath)).withCloseable { final analyzeWriter ->
-          analyzeWriter.println('dependencyArtifacts:')
-          dependencyArtifacts.forEach({ final artifact -> analyzeWriter.println(artifact) })
-          analyzeWriter.println()
+      final Path analyzeOutputPath = outputDirectoryPath.resolve("${taskName}.log")
+      new PrintWriter(Files.newOutputStream(analyzeOutputPath)).withCloseable { final analyzeWriter ->
+        analyzeWriter.println("classesUsedByClassesDir:")
+        classesUsedByClassesDir.each { analyzeWriter.println("'" + it + "'") }
+        analyzeWriter.println()
 
-          analyzeWriter.println("allDependencyArtifacts:")
-          allDependencyArtifacts.forEach({ final artifact -> analyzeWriter.println(artifact) })
-          analyzeWriter.println()
+        analyzeWriter.println("declaredDependencies:")
+        declaredDependencies.each { analyzeWriter.println(it) }
+        analyzeWriter.println()
 
-          analyzeWriter.println("fileClassMap:")
-          for (final def classMapEntry : fileClassMap) {
-            analyzeWriter.print("${classMapEntry.key}=")
-            for (final def theClass : classMapEntry.value) {
-              analyzeWriter.print(theClass)
-              analyzeWriter.print(', ')
-            }
-              analyzeWriter.println()
-          }
-          analyzeWriter.println()
+        analyzeWriter.println("moduleByQualifiedClassName:")
+        moduleByQualifiedClassName.each { analyzeWriter.println(it) }
+        analyzeWriter.println()
 
-          analyzeWriter.println("dependencyClasses:")
-          dependencyClasses.forEach({ final dependencyClass -> analyzeWriter.println(dependencyClass) })
-          analyzeWriter.println()
+        analyzeWriter.println("allowedToDeclaredModules:")
+        allowedToDeclaredModules.each { analyzeWriter.println(it) }
+        analyzeWriter.println()
 
-          analyzeWriter.println("usedArtifacts:")
-          usedArtifacts.forEach({ final usedArtifact -> analyzeWriter.println(usedArtifact) })
-          analyzeWriter.println()
+        analyzeWriter.println("allowedToUseModules:")
+        allowedToUseModules.each { analyzeWriter.println(it) }
+        analyzeWriter.println()
 
-          analyzeWriter.println("usedDeclaredArtifacts:")
-          usedDeclaredArtifacts.forEach({ final usedDeclaredArtifact -> analyzeWriter.println(usedDeclaredArtifact) })
-          analyzeWriter.println()
+        analyzeWriter.println("neededDependencies:")
+        neededDependencies.each { analyzeWriter.println(it) }
+        analyzeWriter.println()
 
-          analyzeWriter.println("usedUndeclaredArtifacts:")
-          usedUndeclaredArtifacts.forEach({ final usedUndeclared -> analyzeWriter.println(usedUndeclared) })
-          analyzeWriter.println()
+        analyzeWriter.println("unusedDeclaredDependencies:")
+        unusedDeclaredDependencies.each { analyzeWriter.println(it) }
+        analyzeWriter.println()
 
-          analyzeWriter.println("unusedDeclaredArtifacts:")
-          unusedDeclaredArtifacts.forEach({ final unusedDeclared -> analyzeWriter.println(unusedDeclared) })
-          analyzeWriter.println()
-
-          analyzeWriter.println("allowedToUseArtifacts:")
-          allowedToUseArtifacts.forEach({ final allowedToUse -> analyzeWriter.println(allowedToUse) })
-          analyzeWriter.println()
-
-          analyzeWriter.println("allowedToDeclareArtifacts:")
-          allowedToDeclareArtifacts.forEach({ final allowedToDeclare -> analyzeWriter.println(allowedToDeclare) })
-          analyzeWriter.println()
-
-          analyzeWriter.println("allArtifacts:")
-          allArtifacts.forEach({ final artifact -> analyzeWriter.println(artifact) })
-          analyzeWriter.println()
-        }
+        analyzeWriter.println("usedUndeclaredDependencies:")
+        usedUndeclaredDependencies.each { analyzeWriter.println(it) }
+        analyzeWriter.println()
+      }
     } else {
-      logger.info "dependencyArtifacts = $dependencyArtifacts"
-      logger.info "allDependencyArtifacts = $allDependencyArtifacts"
-      logger.info "fileClassMap = $fileClassMap"
-      logger.info "dependencyClasses = $dependencyClasses"
-      logger.info "usedArtifacts = $usedArtifacts"
-      logger.info "usedDeclaredArtifacts = $usedDeclaredArtifacts"
-      logger.info "usedUndeclaredArtifacts = $usedUndeclaredArtifacts"
-      logger.info "unusedDeclaredArtifacts = $unusedDeclaredArtifacts"
-      logger.info "allowedToUseArtifacts = $allowedToUseArtifacts"
-      logger.info "allowedToDeclareArtifacts = $allowedToDeclareArtifacts"
-      logger.info "allArtifacts = $allArtifacts"
+      logger.info "classesUsedByClassesDir = $classesUsedByClassesDir"
+      logger.info "declaredDependencies = $declaredDependencies"
+      logger.info "moduleByQualifiedClassName = $moduleByQualifiedClassName"
+      logger.info("allowedToDeclaredModules = $allowedToDeclaredModules")
+      logger.info("allowedToUseModules = $allowedToUseModules")
+      logger.info "neededDependencies = $neededDependencies"
+      logger.info "unusedDeclaredDependencies = $unusedDeclaredDependencies"
+      logger.info "usedUndeclaredDependencies = $usedUndeclaredDependencies"
     }
 
-    def usedDeclared = allArtifacts.findAll {ResolvedArtifact artifact -> artifact.file in usedDeclaredArtifacts}
-    def usedUndeclared = allArtifacts.findAll {ResolvedArtifact artifact -> artifact.file in usedUndeclaredArtifacts}
-    if (allowedToUseArtifacts) {
-      usedUndeclared -= allowedToUseArtifacts
-    }
-    def unusedDeclared = allArtifacts.findAll {ResolvedArtifact artifact -> artifact.file in unusedDeclaredArtifacts}
-    if (allowedToDeclareArtifacts) {
-      unusedDeclared -= allowedToDeclareArtifacts
-    }
-
-    return new ProjectDependencyAnalysis(
-        usedDeclared.unique {it.file} as Set<Artifact>,
-        usedUndeclared.unique {it.file} as Set<Artifact>,
-        unusedDeclared.unique {it.file} as Set<Artifact>)
+    return new GradleProjectDependencyAnalysis(neededDependencies, usedUndeclaredDependencies, unusedDeclaredDependencies)
   }
 
   private Set<ResolvedDependency> getRequiredDependencies() {
@@ -191,49 +173,31 @@ class ProjectDependencyResolver {
   }
 
   static Set<ResolvedDependency> getFirstLevelDependencies(final List<Configuration> configurations) {
-    configurations.collect {it.resolvedConfiguration.firstLevelModuleDependencies}.flatten() as Set<ResolvedDependency>
+    configurations.collect { it.resolvedConfiguration.firstLevelModuleDependencies }.flatten() as Set<ResolvedDependency>
   }
 
   /**
-   * Map each of the files declared on all configurations of the project to a collection of the class names they
+   * Map each of the artifacts in {@code resolvedArtifacts} to a collection of the class names they
    * contain.
-   * @param project the project we're working on
-   * @return a Map of files to their classes
-   * @throws IOException
+   * @param resolvedArtifacts the artifacts to get all classes of
+   * @return a Map of artifacts to their classes
+   * @throws IOException if an IO error occurs
    */
-  private Map<File, Set<String>> buildArtifactClassMap(Set<File> dependencyArtifacts) throws IOException {
-    final Map<File, Set<String>> artifactClassMap = [:]
-
+  private Set<String> getQualifiedClassNamesByArtifact(final ResolvedArtifact resolvedArtifact) throws IOException {
     int hits = 0
     int misses = 0
-    dependencyArtifacts.each {File file ->
-      def classes = artifactClassCache[file]
-      if (null == classes) {
-        logger.debug "Artifact class cache miss for $file"
-        misses++
-        classes = classAnalyzer.analyze(file.toURI().toURL()).asImmutable()
-        artifactClassCache.putIfAbsent(file, classes)
-      }
-      else {
-        logger.debug "Artifact class cache hit for $file"
-        hits++
-      }
-      artifactClassMap.put(file, classes)
+    Set<String> classes = qualifiedClassNameByArtifactIdentifier[resolvedArtifact.id]
+    if (null == classes) {
+      logger.debug "qualifiedClassNameByArtifactCache miss for $resolvedArtifact"
+      misses++
+      classes = classAnalyzer.analyze(resolvedArtifact.file.toURI().toURL()).asImmutable()
+      qualifiedClassNameByArtifactIdentifier.putIfAbsent(resolvedArtifact.id, classes)
+    } else {
+      logger.debug "qualifiedClassNameByArtifactCache hit for $resolvedArtifact"
+      hits++
     }
-    logger.info "Built artifact class map with $hits hits and $misses misses; cache size is ${artifactClassCache.size()}"
-    return artifactClassMap
-  }
-
-  private Set<File> findModuleArtifactFiles(Set<ResolvedDependency> dependencies) {
-    ((dependencies
-        .collect {it.moduleArtifacts}.flatten()) as Set<ResolvedArtifact>)
-        .collect {it.file}.unique() as Set<File>
-  }
-
-  private Set<File> findAllModuleArtifactFiles(Set<ResolvedDependency> dependencies) {
-    ((dependencies
-        .collect {it.allModuleArtifacts}.flatten()) as Set<ResolvedArtifact>)
-        .collect {it.file}.unique() as Set<File>
+    logger.debug "Built qualifiedClassNameByArtifactCache with $hits hits and $misses misses; cache size is ${qualifiedClassNameByArtifactIdentifier.size()}"
+    return classes
   }
 
   /**
@@ -242,26 +206,99 @@ class ProjectDependencyResolver {
    * @return a Set of class names
    */
   private Set<String> analyzeClassDependencies() {
-    classesDirs.collect {File it -> dependencyAnalyzer.analyze(it.toURI().toURL())}
-        .flatten() as Set<String>
+    // karlfixme remove empty strings, maybe remove anything with whitespace, or maybe just use classAnalyzer
+    classesDirs.collect { final File it -> dependencyAnalyzer.analyze(it.toURI().toURL()) }
+            .flatten() as Set<String>
   }
 
   /**
-   * Determine which of the project dependencies are used.
+   * Loads all known dependencies and their children from {@link #getRequiredDependencies()},
+   * {@link #getAllowedToDeclareDependencies()}, and {@link #getAllowedToUseDependencies()} and builds a map from every
+   * qualified classname found to the set of {@link ModuleVersionIdentifier} that have an artifact with that class.
    *
-   * @param artifactClassMap a map of Files to the classes they contain
-   * @param dependencyClasses all classes used directly by the project
-   * @return a set of project dependencies confirmed to be used by the project
+   * @return a map from a fully qualified classname to a set of modules which have that class
    */
-  private Set<File> buildUsedArtifacts(Map<File, Set<String>> artifactClassMap, Set<String> dependencyClasses) {
-    Set<File> usedArtifacts = new HashSet()
+  private Map<String, Set<ModuleVersionIdentifier>> getAllModulesByQualifiedClassName() {
+    final Map<String, Set<ModuleVersionIdentifier>> moduleVersionsByQualifiedClassname = new HashMap<>()
 
-    dependencyClasses.each {String className ->
-      File artifact = artifactClassMap.find {it.value.contains(className)}?.key
-      if (artifact) {
-        usedArtifacts << artifact
+    getRequiredDependencies().each {
+      addModuleByQualifiedClassname(moduleVersionsByQualifiedClassname, it)
+    }
+    getAllowedToDeclareDependencies().each {
+      addModuleByQualifiedClassname(moduleVersionsByQualifiedClassname, it)
+    }
+    getAllowedToUseDependencies().each {
+      addModuleByQualifiedClassname(moduleVersionsByQualifiedClassname, it)
+    }
+
+    return moduleVersionsByQualifiedClassname
+  }
+
+  /**
+   * Scans all artifacts in {@code resolvedDependency} and their children, adding to the map {@code moduleVersionsByQualifiedClassname}
+   * for every class found in the resolvedDependency artifacts.
+   * <br>
+   * This method avoids dependency loops by keeping track of dependencies it has already acquired children for.
+   *
+   * @param moduleVersionsByQualifiedClassname
+   * @param resolvedDependency
+   */
+  private void addModuleByQualifiedClassname(final Map<String, Set<ModuleVersionIdentifier>> moduleVersionsByQualifiedClassname, final ResolvedDependency resolvedDependency) {
+    final Set<ResolvedDependency> dependenciesToScan = new LinkedHashSet<ResolvedDependency>()
+
+    final Stack<ResolvedDependency> dependenciesToLoadChildrenFor = new Stack<ResolvedDependency>()
+    dependenciesToLoadChildrenFor.push(resolvedDependency)
+
+    while (dependenciesToLoadChildrenFor.size() > 0) {
+      def currentDependency = dependenciesToLoadChildrenFor.pop()
+      if (!dependenciesToScan.contains(currentDependency)) {
+        dependenciesToScan.add(currentDependency)
+        currentDependency.children.each { final ResolvedDependency childDependency ->
+          dependenciesToLoadChildrenFor.push(childDependency)
+        }
       }
     }
-    return usedArtifacts
+
+    dependenciesToScan.each { final resolvedDependencyToScan ->
+      resolvedDependencyToScan.moduleArtifacts.each { final ResolvedArtifact resolvedArtifact ->
+        getQualifiedClassNamesByArtifact(resolvedArtifact).each { final String qualifiedClassname ->
+          moduleVersionsByQualifiedClassname.compute(qualifiedClassname, { final String key, Set<ModuleVersionIdentifier> value ->
+            if (value == null) {
+              value = new HashSet<ModuleVersionIdentifier>()
+            }
+            value.add(resolvedDependencyToScan.module.id)
+            return value
+          })
+        }
+      }
+    }
+//    resolvedDependency.children.each {
+//      addModuleByQualifiedClassname(moduleVersionsByQualifiedClassname, it)
+//    }
+  }
+
+  /**
+   * Scans every class in {@code neededQualifiedClassnames} looking for an entry in {@code allModulesByQualifiedClassname}
+   * as entries are found they are added to the set that will be returned.
+   *
+   * @param neededQualifiedClassnames the classnames to look for in {@code allModulesByQualifiedClassname}
+   * @param allModulesByQualifiedClassname every dependency classname and it's module version information
+   * @return a set of all known ModuleVersionIdentifier (dependencies) for the passed in classes {@code neededQualifiedClassnames}
+   */
+  private Set<ModuleVersionIdentifier> getNeededModules(final Set<String> neededQualifiedClassnames, final Map<String, Set<ModuleVersionIdentifier>> allModulesByQualifiedClassname) {
+    final Set<ModuleVersionIdentifier> neededModuleSet = new LinkedHashSet<>()
+
+    neededQualifiedClassnames.each { final String neededClass ->
+      final def moduleVersionIdentifiers = allModulesByQualifiedClassname.get(neededClass)
+      if (moduleVersionIdentifiers == null) {
+        return
+      }
+      if (moduleVersionIdentifiers.size() > 1) {
+        logger.warn("More than one dependency ($moduleVersionIdentifiers) includes the class $neededClass")
+      }
+      neededModuleSet.addAll(moduleVersionIdentifiers)
+    }
+
+    return neededModuleSet
   }
 }
