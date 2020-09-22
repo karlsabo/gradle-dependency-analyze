@@ -47,15 +47,15 @@ class AnalyzeDependenciesTask extends DefaultTask {
                     .analyzeDependencies(name)
     final StringBuffer buffer = new StringBuffer()
     if (analysis.getUnusedDeclared().size() > 0) {
-      buffer.append("Unused declared ${analysis.getUnusedDeclared().size()==1?"dependency":"dependencies"}: \n")
+      buffer.append("Unused declared ${analysis.getUnusedDeclared().size() == 1 ? "dependency" : "dependencies"}: ").append(System.lineSeparator())
       analysis.getUnusedDeclared().each {
-        buffer.append(" - $it")
+        buffer.append(" - $it").append(System.lineSeparator())
       }
     }
     if (analysis.getUsedUndeclared().size() > 0) {
-      buffer.append("Used undeclared ${analysis.getUsedUndeclared().size() == 1 ? "dependency":"dependencies"}: \n")
+      buffer.append("Used undeclared ${analysis.getUsedUndeclared().size() == 1 ? "dependency" : "dependencies"}: ").append(System.lineSeparator())
       analysis.getUsedUndeclared().each {
-        buffer.append(" - $it")
+        buffer.append(" - $it").append(System.lineSeparator())
       }
     }
 
@@ -63,7 +63,7 @@ class AnalyzeDependenciesTask extends DefaultTask {
     outputFile.parentFile.mkdirs()
     outputFile.text = buffer.toString()
     if (buffer) {
-      def message = "Dependency analysis found issues.\n$buffer"
+      def message = "Dependency analysis found issues.${System.lineSeparator()}$buffer"
       if (justWarn) {
         logger.warn message
       } else {
