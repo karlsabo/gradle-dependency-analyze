@@ -75,9 +75,9 @@ class AnalyzeDependenciesPluginSpec extends Specification {
 
         where:
         configuration    | expectedResult
-        "compile"        | "Used undeclared "
-        "implementation" | "Used undeclared "
-        "compileOnly"    | "Used undeclared "
+        "compile"        | "Used undeclared"
+        "implementation" | "Used undeclared"
+        "compileOnly"    | "Used undeclared"
         "runtimeOnly"    | BUILD_FAILURE
     }
 
@@ -202,9 +202,9 @@ class AnalyzeDependenciesPluginSpec extends Specification {
 
         where:
         configuration        | expectedResult
-        "testCompile"        | "Used undeclared "
-        "testImplementation" | "Used undeclared "
-        "testCompileOnly"    | "Used undeclared "
+        "testCompile"        | "Used undeclared"
+        "testImplementation" | "Used undeclared"
+        "testCompileOnly"    | "Used undeclared"
         "testRuntimeOnly"    | TEST_BUILD_FAILURE
     }
 
