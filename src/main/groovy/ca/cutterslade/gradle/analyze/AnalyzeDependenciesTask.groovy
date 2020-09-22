@@ -1,8 +1,3 @@
-//==============================================================================
-// This software is developed by Stellar Science Ltd Co and the U.S. Government.
-// Copyright (C) 2020 Stellar Science; U.S. Government has Unlimited Rights.
-// Warning: May contain EXPORT CONTROLLED, FOUO, ITAR, or sensitive information.
-//==============================================================================
 package ca.cutterslade.gradle.analyze
 
 import org.gradle.api.DefaultTask
@@ -50,25 +45,15 @@ class AnalyzeDependenciesTask extends DefaultTask {
     GradleProjectDependencyAnalysis analysis =
             new ProjectDependencyResolver(project, require, allowedToUse, allowedToDeclare, classesDirs, logDependencyInformationToFiles)
                     .analyzeDependencies(name)
-    StringBuffer buffer = new StringBuffer()
-//    ['usedUndeclared', 'unusedDeclared'].each {section ->
-//      def violations = analysis."$section"
-//      if (violations) {
-//        buffer.append("$section: \n")
-//        violations.sort { it.moduleVersion.id.toString() }.each { DefaultResolvedArtifact it ->
-//          def clas = it.classifier ? ":$it.classifier" : ""
-//          buffer.append(" - $it.moduleVersion.id$clas@$it.extension\n")
-//        }
-//      }
-//    }
+    final StringBuffer buffer = new StringBuffer()
     if (analysis.getUnusedDeclared().size() > 0) {
-      buffer.append("Unused declared dependency (unusedDeclaredArtifacts): \n")
+      buffer.append("Unused declared ${analysis.getUnusedDeclared().size()==1?"dependency":"dependencies"}: \n")
       analysis.getUnusedDeclared().each {
         buffer.append(" - $it")
       }
     }
     if (analysis.getUsedUndeclared().size() > 0) {
-      buffer.append("Used undeclared dependency (usedUndeclaredArtifacts): \n")
+      buffer.append("Used undeclared ${analysis.getUsedUndeclared().size() == 1 ? "dependency":"dependencies"}: \n")
       analysis.getUsedUndeclared().each {
         buffer.append(" - $it")
       }

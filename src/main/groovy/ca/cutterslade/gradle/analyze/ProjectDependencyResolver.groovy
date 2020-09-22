@@ -1,8 +1,3 @@
-//==============================================================================
-// This software is developed by Stellar Science Ltd Co and the U.S. Government.
-// Copyright (C) 2020 Stellar Science; U.S. Government has Unlimited Rights.
-// Warning: May contain EXPORT CONTROLLED, FOUO, ITAR, or sensitive information.
-//==============================================================================
 package ca.cutterslade.gradle.analyze
 
 import groovy.transform.CompileStatic
@@ -22,6 +17,8 @@ import org.gradle.api.logging.Logger
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
+import java.util.regex.Pattern
+import java.util.stream.Collectors
 
 @CompileStatic
 class ProjectDependencyResolver {
@@ -94,20 +91,13 @@ class ProjectDependencyResolver {
     final def allowedToUseModules = allowedToUseDependencies.collect { it.module.id } as Set<ModuleVersionIdentifier>
 
     final Set<ModuleVersionIdentifier> unusedDeclaredDependencies = new LinkedHashSet<>(declaredDependencies)
-    logger.info "unusedDeclaredDependencies = $unusedDeclaredDependencies"
     unusedDeclaredDependencies.removeAll(neededDependencies)
-    logger.info "unusedDeclaredDependencies after removing needed = $unusedDeclaredDependencies"
     unusedDeclaredDependencies.removeAll(allowedToDeclaredModules)
-    logger.info "unusedDeclaredDependencies after removing allowed to delcare = $unusedDeclaredDependencies"
     unusedDeclaredDependencies.removeAll(allowedToUseModules)
-    logger.info "unusedDeclaredDependencies after removing allowed to use = $unusedDeclaredDependencies"
 
     final Set<ModuleVersionIdentifier> usedUndeclaredDependencies = new LinkedHashSet<>(neededDependencies)
-    logger.info "usedUndeclaredDependencies = $usedUndeclaredDependencies"
     usedUndeclaredDependencies.removeAll(declaredDependencies)
-    logger.info "usedUndeclaredDependencies after removing declaredDependencies = $usedUndeclaredDependencies"
     usedUndeclaredDependencies.removeAll(allowedToUseModules)
-    logger.info "usedUndeclaredDependencies after removing allowedToUseDependencies = $usedUndeclaredDependencies"
 
     if (logDependencyInformationToFile) {
       final def outputDirectoryPath = buildDirPath.resolve(AnalyzeDependenciesTask.DEPENDENCY_ANALYZE_DEPENDENCY_DIRECTORY_NAME)
@@ -157,7 +147,7 @@ class ProjectDependencyResolver {
       logger.info "usedUndeclaredDependencies = $usedUndeclaredDependencies"
     }
 
-    return new GradleProjectDependencyAnalysis(neededDependencies, usedUndeclaredDependencies, unusedDeclaredDependencies)
+    return new GradleProjectDependencyAnalysis(usedUndeclaredDependencies, unusedDeclaredDependencies)
   }
 
   private Set<ResolvedDependency> getRequiredDependencies() {
@@ -206,9 +196,9 @@ class ProjectDependencyResolver {
    * @return a Set of class names
    */
   private Set<String> analyzeClassDependencies() {
-    // karlfixme remove empty strings, maybe remove anything with whitespace, or maybe just use classAnalyzer
-    classesDirs.collect { final File it -> dependencyAnalyzer.analyze(it.toURI().toURL()) }
-            .flatten() as Set<String>
+    final Pattern WHITE_SPACE_PATTERN = Pattern.compile("\\s")
+    final Set<String> dependencyAnalyzer = classesDirs.collect{final File it-> dependencyAnalyzer.analyze(it.toURI().toURL())}.flatten() as Set<String>
+    dependencyAnalyzer.stream().filter({!it.isEmpty() && !it.isAllWhitespace() && !WHITE_SPACE_PATTERN.matcher(it).find()}).collect(Collectors.toSet())
   }
 
   /**
@@ -272,9 +262,6 @@ class ProjectDependencyResolver {
         }
       }
     }
-//    resolvedDependency.children.each {
-//      addModuleByQualifiedClassname(moduleVersionsByQualifiedClassname, it)
-//    }
   }
 
   /**

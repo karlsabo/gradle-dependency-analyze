@@ -1,8 +1,3 @@
-//==============================================================================
-// This software is developed by Stellar Science Ltd Co and the U.S. Government.
-// Copyright (C) 2020 Stellar Science; U.S. Government has Unlimited Rights.
-// Warning: May contain EXPORT CONTROLLED, FOUO, ITAR, or sensitive information.
-//==============================================================================
 package ca.cutterslade.gradle.analyze
 
 import org.gradle.testkit.runner.BuildResult
@@ -80,9 +75,9 @@ class AnalyzeDependenciesPluginSpec extends Specification {
 
         where:
         configuration    | expectedResult
-        "compile"        | "usedUndeclaredArtifacts"
-        "implementation" | "usedUndeclaredArtifacts"
-        "compileOnly"    | "usedUndeclaredArtifacts"
+        "compile"        | "Used undeclared "
+        "implementation" | "Used undeclared "
+        "compileOnly"    | "Used undeclared "
         "runtimeOnly"    | BUILD_FAILURE
     }
 
@@ -104,9 +99,9 @@ class AnalyzeDependenciesPluginSpec extends Specification {
 
         where:
         configuration    | expectedResult
-        "compile"        | "unusedDeclaredArtifacts"
-        "implementation" | "unusedDeclaredArtifacts"
-        "compileOnly"    | "unusedDeclaredArtifacts"
+        "compile"        | "Unused declared"
+        "implementation" | "Unused declared"
+        "compileOnly"    | "Unused declared"
         "runtimeOnly"    | SUCCESS
     }
 
@@ -179,9 +174,9 @@ class AnalyzeDependenciesPluginSpec extends Specification {
 
         where:
         configuration        | expectedResult
-        "testCompile"        | "unusedDeclaredArtifacts"
-        "testImplementation" | "unusedDeclaredArtifacts"
-        "testCompileOnly"    | "unusedDeclaredArtifacts"
+        "testCompile"        | "Unused declared"
+        "testImplementation" | "Unused declared"
+        "testCompileOnly"    | "Unused declared"
         "testRuntimeOnly"    | SUCCESS
     }
 
@@ -207,9 +202,9 @@ class AnalyzeDependenciesPluginSpec extends Specification {
 
         where:
         configuration        | expectedResult
-        "testCompile"        | "usedUndeclaredArtifacts"
-        "testImplementation" | "usedUndeclaredArtifacts"
-        "testCompileOnly"    | "usedUndeclaredArtifacts"
+        "testCompile"        | "Used undeclared "
+        "testImplementation" | "Used undeclared "
+        "testCompileOnly"    | "Used undeclared "
         "testRuntimeOnly"    | TEST_BUILD_FAILURE
     }
 
