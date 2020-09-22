@@ -178,15 +178,15 @@ class ProjectDependencyResolver {
     int misses = 0
     Set<String> classes = qualifiedClassNameByArtifactIdentifier[resolvedArtifact.id]
     if (null == classes) {
-      logger.debug "qualifiedClassNameByArtifactCache miss for $resolvedArtifact"
+      logger.debug "qualifiedClassNameByArtifactIdentifier miss for $resolvedArtifact"
       misses++
       classes = classAnalyzer.analyze(resolvedArtifact.file.toURI().toURL()).asImmutable()
       qualifiedClassNameByArtifactIdentifier.putIfAbsent(resolvedArtifact.id, classes)
     } else {
-      logger.debug "qualifiedClassNameByArtifactCache hit for $resolvedArtifact"
+      logger.debug "qualifiedClassNameByArtifactIdentifier hit for $resolvedArtifact"
       hits++
     }
-    logger.debug "Built qualifiedClassNameByArtifactCache with $hits hits and $misses misses; cache size is ${qualifiedClassNameByArtifactIdentifier.size()}"
+    logger.debug "Built qualifiedClassNameByArtifactIdentifier with $hits hits and $misses misses; cache size is ${qualifiedClassNameByArtifactIdentifier.size()}"
     return classes
   }
 
