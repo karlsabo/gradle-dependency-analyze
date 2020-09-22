@@ -251,7 +251,7 @@ class AnalyzeDependenciesPluginSpec extends Specification {
         GradleRunner.create()
                 .withProjectDir(projectDir.getRoot())
                 .withPluginClasspath()
-                .withArguments("-i", "--stacktrace", "--no-parallel", "build")
+                .withArguments("build")
     }
 
     private static void assertBuildSuccess(BuildResult result) {
