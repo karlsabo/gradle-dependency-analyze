@@ -50,9 +50,9 @@ If the dependency analysis finds issues, it will normally cause the build to fai
 * What went wrong:
 Execution failed for task ':analyzeClassesDependencies'.
 > Dependency analysis found issues.
-  usedUndeclaredArtifacts: 
+  Used undeclared dependency: 
    - ch.qos.logback:logback-core:1.2.3@jar
-  unusedDeclaredArtifacts: 
+  Unused declared dependencies: 
    - com.google.guava:guava:25.1-jre@jar
    - commons-io:commons-io:2.5@jar
    - commons-lang:commons-lang:2.4@jar
