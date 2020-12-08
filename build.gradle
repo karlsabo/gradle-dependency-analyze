@@ -10,7 +10,7 @@ plugins {
 }
 
 group = 'ca.cutterslade.gradle'
-version = '1.4.3-STELLAR-SNAPSHOT'
+version = '1.4.4-STELLAR-SNAPSHOT'
 
 repositories {
   jcenter()

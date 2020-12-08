@@ -49,7 +49,6 @@ class AnalyzeDependenciesPlugin implements Plugin<Project> {
       ) {
         require = [
             project.configurations.testCompile,
-            project.configurations.findByName('testCompileOnly'),
             project.configurations.findByName('testCompileClasspath')
         ]
         allowedToUse = [
